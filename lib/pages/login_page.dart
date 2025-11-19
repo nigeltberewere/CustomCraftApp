@@ -7,6 +7,7 @@ import 'signup_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../utils/browser_detector.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -160,8 +161,18 @@ class _LoginPageState extends State<LoginPage> {
       // using the google_sign_in package flow (authenticate()).
       GoogleSignInAccount? googleUser;
       if (kIsWeb) {
-        // Web: use FirebaseAuth signInWithPopup to show the Google popup.
+        // Web: prefer a popup, but on iOS Safari popups are often blocked.
+        // Use a redirect-based flow on iOS Safari and let the
+        // authStateChanges listener handle navigation after the redirect.
         final provider = GoogleAuthProvider();
+        if (isIosSafari()) {
+          await FirebaseAuth.instance.signInWithRedirect(provider);
+          // After redirect completes, the page reloads and authStateChanges
+          // listener (registered in initState) will run and navigate.
+          return;
+        }
+
+        // Default web behavior: show the popup.
         final UserCredential webUserCredential =
             await FirebaseAuth.instance.signInWithPopup(provider);
         final User? webUser = webUserCredential.user;

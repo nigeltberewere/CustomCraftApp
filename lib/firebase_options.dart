@@ -2,7 +2,9 @@
 // ignore_for_file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+  show defaultTargetPlatform, kIsWeb, TargetPlatform;
+// Runtime detection of the web auth domain (returns hostname on web).
+import 'utils/auth_domain.dart' as auth_domain;
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -40,15 +42,25 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBAnX3BA6VTppFHXNJosbLK_gRyWW3PZaw',
-    appId: '1:1072334388749:web:1d568988c632ef68c45f44',
-    messagingSenderId: '1072334388749',
-    projectId: 'customcraftapp',
-    authDomain: 'customcraftapp.firebaseapp.com',
-    storageBucket: 'customcraftapp.firebasestorage.app',
-    measurementId: 'G-421PC9KBKL',
-  );
+  static FirebaseOptions get web {
+    // Determine authDomain at runtime for web so redirect flows work
+    // when the site is served from either the firebaseapp.com or web.app origin.
+    // `getAuthDomain()` is conditionally exported: the web implementation
+    // uses `dart:html` (window.location.hostname) while non-web just returns
+    // the primary hosting domain.
+    // Placing this in a getter prevents requiring a const value.
+    // Import separated to avoid referencing dart:html from non-web builds.
+  final authDomainValue = kIsWeb ? auth_domain.getAuthDomain() : 'customcraftapp.web.app';
+    return FirebaseOptions(
+      apiKey: 'AIzaSyBAnX3BA6VTppFHXNJosbLK_gRyWW3PZaw',
+      appId: '1:1072334388749:web:1d568988c632ef68c45f44',
+      messagingSenderId: '1072334388749',
+      projectId: 'customcraftapp',
+      authDomain: authDomainValue,
+      storageBucket: 'customcraftapp.firebasestorage.app',
+      measurementId: 'G-421PC9KBKL',
+    );
+  }
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyA_omf_kp89Ojmoky7vcKIWHQXswF2DYHU',

@@ -37,14 +37,31 @@ android {
 
     signingConfigs {
         create("release") {
-            val keyProperties = Properties()
-            val keyPropertiesFile = rootProject.file("key.properties")
-            if (keyPropertiesFile.exists()) {
-                keyProperties.load(keyPropertiesFile.inputStream())
-                storeFile = file(keyProperties["storeFile"].toString())
-                storePassword = keyProperties["storePassword"].toString()
-                keyAlias = keyProperties["keyAlias"].toString()
-                keyPassword = keyProperties["keyPassword"].toString()
+            // Prefer environment variables for CI/automation. Example env names:
+            // KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD
+            val envStoreFile: String? = System.getenv("KEYSTORE_FILE")
+            val envStorePassword: String? = System.getenv("KEYSTORE_PASSWORD")
+            val envKeyAlias: String? = System.getenv("KEY_ALIAS")
+            val envKeyPassword: String? = System.getenv("KEY_PASSWORD")
+
+            if (!envStoreFile.isNullOrEmpty() && !envStorePassword.isNullOrEmpty() &&
+                !envKeyAlias.isNullOrEmpty() && !envKeyPassword.isNullOrEmpty()) {
+                // Use environment-provided values (recommended for CI)
+                storeFile = file(envStoreFile)
+                storePassword = envStorePassword
+                keyAlias = envKeyAlias
+                keyPassword = envKeyPassword
+            } else {
+                // Fallback to local key.properties for developer convenience
+                val keyProperties = Properties()
+                val keyPropertiesFile = rootProject.file("key.properties")
+                if (keyPropertiesFile.exists()) {
+                    keyProperties.load(keyPropertiesFile.inputStream())
+                    storeFile = file(keyProperties["storeFile"].toString())
+                    storePassword = keyProperties["storePassword"].toString()
+                    keyAlias = keyProperties["keyAlias"].toString()
+                    keyPassword = keyProperties["keyPassword"].toString()
+                }
             }
         }
     }

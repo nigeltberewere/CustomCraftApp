@@ -1,0 +1,21 @@
+# Example key.properties for repository (DO NOT include real passwords)
+# Copy this to android/key.properties and fill the real values locally.
+
+storePassword=<YOUR_STORE_PASSWORD>
+keyPassword=<YOUR_KEY_PASSWORD>
+keyAlias=upload
+# Use either relative path or absolute path to your keystore file. Example:
+# storeFile=../keystore/upload-keystore.jks
+storeFile=C:\\Users\\<your-user>\\upload-keystore.jks
+
+# Alternatively, you can provide signing config via environment variables (recommended for CI):
+# KEYSTORE_FILE - absolute or relative path to the keystore file
+# KEYSTORE_PASSWORD - keystore (store) password
+# KEY_ALIAS - key alias (e.g. upload)
+# KEY_PASSWORD - key password
+
+# Example (PowerShell):
+# $env:KEYSTORE_FILE = 'C:\\Users\\nigel\\upload-keystore.jks'
+# $env:KEYSTORE_PASSWORD = 'your_store_password'
+# $env:KEY_ALIAS = 'upload'
+# $env:KEY_PASSWORD = 'your_key_password'
