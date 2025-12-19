@@ -1,0 +1,121 @@
+name: Build iOS for Sideloading
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build_ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      # 1. CLEANUP (Critical for a fresh start)
+      - name: Clean Build
+        run: |
+          rm -rf ios/Pods
+          rm -f ios/Podfile.lock
+          flutter clean
+
+      # 2. INJECT KEYS - create .env for OPENAI (existing)
+      - name: Create .env file
+        run: echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > .env
+
+      # 2b. INJECT KEYS - create lib/utils/constants.dart from GEMINI secret (CI only)
+      - name: Create lib/utils/constants.dart from GEMINI secret
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          key = os.environ.get('GEMINI_API_KEY', '')
+          pathlib.Path('lib/utils').mkdir(parents=True, exist_ok=True)
+          with open('lib/utils/constants.dart', 'w') as f:
+              f.write('// Auto-generated in CI. DO NOT COMMIT.\n')
+              f.write('class AppConstants {\n')
+              f.write('  static const String geminiApiKey = %s;\n' % json.dumps(key))
+              f.write('}\n')
+          print('WROTE lib/utils/constants.dart (CI-only)')
+          PY
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 3. BUILD - use xcodebuild (pods installed first)
+      - name: Prepare iOS and Install Pods
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: Build iOS (Direct Xcodebuild)
+        run: |
+          set -e
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            DEVELOPMENT_TEAM="" \
+            -destination 'generic/platform=iOS' \
+            build
+
+      # 4. PACKAGE: robustly find the Runner.app and create an .ipa
+      - name: Package IPA
+        run: |
+          set -e
+          echo "Searching for Runner.app..."
+          APP_PATH=""
+
+          # Common expected locations
+          if [ -d "ios/build/Release-iphoneos/Runner.app" ]; then
+            APP_PATH="ios/build/Release-iphoneos/Runner.app"
+          fi
+
+          # Search under ios for Runner.app as fallback
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find ios -type d -name "Runner.app" 2>/dev/null | head -n 1 || true)
+          fi
+
+          # If still not found, try build products in DerivedData (if available)
+          if [ -z "$APP_PATH" ]; then
+            BUILD_DIR=$(xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -showBuildSettings 2>/dev/null | sed -n 's/.*BUILD_DIR = //p' | head -n1 || true)
+            if [ -n "$BUILD_DIR" ]; then
+              APP_PATH=$(find "$BUILD_DIR" -type d -path "*/Release-iphoneos/Runner.app" 2>/dev/null | head -n1 || true)
+            fi
+          fi
+
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: Runner.app not found. Listing ios directory for debugging:"
+            ls -la ios || true
+            echo "You may need to inspect prior build logs to see where Xcode produced the app."
+            exit 1
+          fi
+
+          echo "Found Runner.app at: $APP_PATH"
+          # Create Payload and copy app
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/Runner.app
+
+          # Create IPA and move it to $GITHUB_WORKSPACE
+          zip -qq -r -9 release.ipa Payload
+          mv release.ipa "$GITHUB_WORKSPACE/release.ipa"
+          echo "release.ipa created at $GITHUB_WORKSPACE/release.ipa"
+
+      # 5. UPLOAD
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-app-release
+          path: release.ipa
